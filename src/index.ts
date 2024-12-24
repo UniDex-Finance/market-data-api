@@ -18,6 +18,25 @@ const port = process.env.PORT || 3001;
 
 app.use(express.json());
 
+function parseDuration(duration: string): number {
+  const value = parseInt(duration);
+  const unit = duration.slice(-1).toLowerCase();
+  const now = Date.now();
+
+  switch (unit) {
+    case 'd': // days
+      return now - (value * 24 * 60 * 60 * 1000);
+    case 'h': // hours
+      return now - (value * 60 * 60 * 1000);
+    case 'w': // weeks
+      return now - (value * 7 * 24 * 60 * 60 * 1000);
+    case 'm': // months (approximate)
+      return now - (value * 30 * 24 * 60 * 60 * 1000);
+    default:
+      throw new Error('Invalid duration format. Use format: 30d, 24h, 4w, or 2m');
+  }
+}
+
 // Start data collection
 async function collectData() {
   try {
@@ -192,6 +211,54 @@ app.get('/api/market/:marketId/history', async (req, res) => {
     };
 
     res.json(response);
+  } catch (error) {
+    console.error('Error fetching market history:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/market/:marketId/history/duration/:duration', async (req, res) => {
+  try {
+    const marketId = Number(req.params.marketId);
+    const duration = req.params.duration;
+
+    if (isNaN(marketId) || marketId < 1 || marketId > 57) {
+      return res.status(400).json({ 
+        error: 'Market ID must be between 1 and 57' 
+      });
+    }
+
+    try {
+      const startTime = parseDuration(duration);
+      const endTime = Date.now();
+
+      const data = await getHistoricalRatesForMarket(marketId, startTime, endTime);
+      
+      // Enhance the response with market information
+      const response = {
+        market: {
+          id: marketId,
+          pair: TRADING_PAIRS[marketId.toString()]
+        },
+        duration: duration,
+        timeRange: {
+          start: new Date(startTime).toISOString(),
+          end: new Date(endTime).toISOString()
+        },
+        dataPoints: data.length,
+        history: data.map((point: HistoricalDataPoint) => ({
+          timestamp: point.timestamp,
+          rate: point.rate,
+          usdm_price: point.usdm_price
+        }))
+      };
+
+      res.json(response);
+    } catch (error) {
+      return res.status(400).json({ 
+        error: 'Invalid duration format. Use format: 30d, 24h, 4w, or 2m' 
+      });
+    }
   } catch (error) {
     console.error('Error fetching market history:', error);
     res.status(500).json({ error: 'Internal server error' });
