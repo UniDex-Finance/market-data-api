@@ -19,21 +19,30 @@ const port = process.env.PORT || 3001;
 app.use(express.json());
 
 function parseDuration(duration: string): number {
-  const value = parseInt(duration);
-  const unit = duration.slice(-1).toLowerCase();
-  const now = Date.now();
+  try {
+    const value = parseInt(duration.slice(0, -1)); // Remove the unit before parsing
+    const unit = duration.slice(-1).toLowerCase();
+    const now = Date.now();
 
-  switch (unit) {
-    case 'd': // days
-      return now - (value * 24 * 60 * 60 * 1000);
-    case 'h': // hours
-      return now - (value * 60 * 60 * 1000);
-    case 'w': // weeks
-      return now - (value * 7 * 24 * 60 * 60 * 1000);
-    case 'm': // months (approximate)
-      return now - (value * 30 * 24 * 60 * 60 * 1000);
-    default:
-      throw new Error('Invalid duration format. Use format: 30d, 24h, 4w, or 2m');
+    if (isNaN(value) || value <= 0) {
+      throw new Error(`Invalid duration value: ${duration}`);
+    }
+
+    switch (unit) {
+      case 'd': // days
+        return now - (value * 24 * 60 * 60 * 1000);
+      case 'h': // hours
+        return now - (value * 60 * 60 * 1000);
+      case 'w': // weeks
+        return now - (value * 7 * 24 * 60 * 60 * 1000);
+      case 'm': // months (approximate)
+        return now - (value * 30 * 24 * 60 * 60 * 1000);
+      default:
+        throw new Error(`Invalid duration unit: ${unit}. Use d, h, w, or m`);
+    }
+  } catch (error) {
+    console.error('Duration parsing error:', error);
+    throw new Error('Invalid duration format. Use format: 30d, 24h, 4w, or 2m');
   }
 }
 
@@ -232,6 +241,8 @@ app.get('/api/market/:marketId/history/duration/:duration', async (req, res) => 
     const duration = req.params.duration;
     const granularity = req.query.granularity as '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '8h' | '24h' | undefined;
 
+    console.log('Duration request:', { marketId, duration, granularity }); // Debug log
+
     if (isNaN(marketId) || marketId < 1 || marketId > 57) {
       return res.status(400).json({ 
         error: 'Market ID must be between 1 and 57' 
@@ -244,42 +255,48 @@ app.get('/api/market/:marketId/history/duration/:duration', async (req, res) => 
       });
     }
 
+    let startTime: number;
     try {
-      const startTime = parseDuration(duration);
-      const endTime = Date.now();
-
-      const data = await getHistoricalRatesForMarket(marketId, startTime, endTime, granularity);
-      
-      // Enhance the response with market information
-      const response = {
-        market: {
-          id: marketId,
-          pair: TRADING_PAIRS[marketId.toString()]
-        },
-        duration: duration,
-        granularity: granularity || '1m',
-        timeRange: {
-          start: new Date(startTime).toISOString(),
-          end: new Date(endTime).toISOString()
-        },
-        dataPoints: data.length,
-        history: data.map((point: HistoricalDataPoint & { sample_count?: number }) => ({
-          timestamp: point.timestamp,
-          rate: point.rate,
-          usdm_price: point.usdm_price,
-          ...(point.sample_count ? { samples: point.sample_count } : {})
-        }))
-      };
-
-      res.json(response);
+      startTime = parseDuration(duration);
     } catch (error) {
+      console.error('Duration parsing failed:', { duration, error });
       return res.status(400).json({ 
-        error: 'Invalid duration format. Use format: 30d, 24h, 4w, or 2m' 
+        error: 'Invalid duration format. Use format: 30d, 24h, 4w, or 2m',
+        details: error instanceof Error ? error.message : 'Unknown error'
       });
     }
+
+    const endTime = Date.now();
+    const data = await getHistoricalRatesForMarket(marketId, startTime, endTime, granularity);
+    
+    // Enhance the response with market information
+    const response = {
+      market: {
+        id: marketId,
+        pair: TRADING_PAIRS[marketId.toString()]
+      },
+      duration: duration,
+      granularity: granularity || '1m',
+      timeRange: {
+        start: new Date(startTime).toISOString(),
+        end: new Date(endTime).toISOString()
+      },
+      dataPoints: data.length,
+      history: data.map((point: HistoricalDataPoint & { sample_count?: number }) => ({
+        timestamp: point.timestamp,
+        rate: point.rate,
+        usdm_price: point.usdm_price,
+        ...(point.sample_count ? { samples: point.sample_count } : {})
+      }))
+    };
+
+    res.json(response);
   } catch (error) {
     console.error('Error fetching market history:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
