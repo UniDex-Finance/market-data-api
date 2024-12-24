@@ -152,7 +152,9 @@ function getIntervalQuery(granularity: Granularity): string {
   return `
     WITH grouped_data AS (
       SELECT 
-        time_bucket('${intervals[granularity]}', to_timestamp(md.timestamp / 1000)) AS bucket,
+        (EXTRACT(EPOCH FROM date_trunc('${intervals[granularity].split(' ')[1]}', 
+          to_timestamp(md.timestamp / 1000)
+        )) * 1000)::bigint as bucket,
         AVG(fr.rate::numeric) as avg_rate,
         AVG(md.usdm_price::numeric) as avg_usdm_price,
         COUNT(*) as sample_count
@@ -165,7 +167,7 @@ function getIntervalQuery(granularity: Granularity): string {
       ORDER BY bucket ASC
     )
     SELECT 
-      EXTRACT(EPOCH FROM bucket) * 1000 as timestamp,
+      bucket as timestamp,
       avg_rate::text as rate,
       avg_usdm_price::text as usdm_price,
       sample_count
