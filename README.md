@@ -249,6 +249,56 @@ Example response:
 }
 ```
 
+### Get Historical Data with Granularity
+Both timestamp-based and duration-based endpoints support data granularity through the `granularity` parameter.
+
+Supported granularities:
+- `1m`: 1 minute (default)
+- `5m`: 5 minutes
+- `15m`: 15 minutes
+- `30m`: 30 minutes
+- `1h`: 1 hour
+- `4h`: 4 hours
+- `8h`: 8 hours
+- `24h`: 24 hours
+
+Examples:
+
+```http
+# Get 4-hour candles for the last 30 days
+GET https://unidexv4-market-data.up.railway.app/api/market/1/history/duration/30d?granularity=4h
+
+# Get hourly data points between timestamps
+GET https://unidexv4-market-data.up.railway.app/api/market/1/history?startTime=1703424343098&endTime=1703510743098&granularity=1h
+```
+
+Example response with granularity:
+```json
+{
+  "market": {
+    "id": 1,
+    "pair": "BTC/USD"
+  },
+  "timeRange": {
+    "start": "2023-11-24T21:59:00.000Z",
+    "end": "2023-12-24T21:59:00.000Z"
+  },
+  "granularity": "4h",
+  "dataPoints": 180,
+  "history": [
+    {
+      "timestamp": "1703424000000",
+      "rate": "0.00152",
+      "usdm_price": "113.691",
+      "samples": 240  // Number of 1-minute samples in this 4h period
+    },
+    // ... more data points
+  ]
+}
+```
+
+The `samples` field indicates how many original data points were averaged to create each aggregated point.
+
 ## Available Markets
 
 | Market ID | Trading Pair | Description |

@@ -177,6 +177,7 @@ app.get('/api/market/:marketId/history', async (req, res) => {
     const marketId = Number(req.params.marketId);
     const startTime = Number(req.query.startTime);
     const endTime = Number(req.query.endTime) || Date.now();
+    const granularity = req.query.granularity as '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '8h' | '24h' | undefined;
 
     if (isNaN(marketId) || isNaN(startTime)) {
       return res.status(400).json({ 
@@ -190,7 +191,13 @@ app.get('/api/market/:marketId/history', async (req, res) => {
       });
     }
 
-    const data = await getHistoricalRatesForMarket(marketId, startTime, endTime);
+    if (granularity && !['1m', '5m', '15m', '30m', '1h', '4h', '8h', '24h'].includes(granularity)) {
+      return res.status(400).json({
+        error: 'Invalid granularity. Supported values: 1m, 5m, 15m, 30m, 1h, 4h, 8h, 24h'
+      });
+    }
+
+    const data = await getHistoricalRatesForMarket(marketId, startTime, endTime, granularity);
     
     // Enhance the response with market information
     const response = {
@@ -202,11 +209,13 @@ app.get('/api/market/:marketId/history', async (req, res) => {
         start: new Date(startTime).toISOString(),
         end: new Date(endTime).toISOString()
       },
+      granularity: granularity || '1m',
       dataPoints: data.length,
-      history: data.map((point: HistoricalDataPoint) => ({
+      history: data.map((point: HistoricalDataPoint & { sample_count?: number }) => ({
         timestamp: point.timestamp,
         rate: point.rate,
-        usdm_price: point.usdm_price
+        usdm_price: point.usdm_price,
+        ...(point.sample_count ? { samples: point.sample_count } : {})
       }))
     };
 
@@ -221,6 +230,7 @@ app.get('/api/market/:marketId/history/duration/:duration', async (req, res) => 
   try {
     const marketId = Number(req.params.marketId);
     const duration = req.params.duration;
+    const granularity = req.query.granularity as '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '8h' | '24h' | undefined;
 
     if (isNaN(marketId) || marketId < 1 || marketId > 57) {
       return res.status(400).json({ 
@@ -228,11 +238,17 @@ app.get('/api/market/:marketId/history/duration/:duration', async (req, res) => 
       });
     }
 
+    if (granularity && !['1m', '5m', '15m', '30m', '1h', '4h', '8h', '24h'].includes(granularity)) {
+      return res.status(400).json({
+        error: 'Invalid granularity. Supported values: 1m, 5m, 15m, 30m, 1h, 4h, 8h, 24h'
+      });
+    }
+
     try {
       const startTime = parseDuration(duration);
       const endTime = Date.now();
 
-      const data = await getHistoricalRatesForMarket(marketId, startTime, endTime);
+      const data = await getHistoricalRatesForMarket(marketId, startTime, endTime, granularity);
       
       // Enhance the response with market information
       const response = {
@@ -241,15 +257,17 @@ app.get('/api/market/:marketId/history/duration/:duration', async (req, res) => 
           pair: TRADING_PAIRS[marketId.toString()]
         },
         duration: duration,
+        granularity: granularity || '1m',
         timeRange: {
           start: new Date(startTime).toISOString(),
           end: new Date(endTime).toISOString()
         },
         dataPoints: data.length,
-        history: data.map((point: HistoricalDataPoint) => ({
+        history: data.map((point: HistoricalDataPoint & { sample_count?: number }) => ({
           timestamp: point.timestamp,
           rate: point.rate,
-          usdm_price: point.usdm_price
+          usdm_price: point.usdm_price,
+          ...(point.sample_count ? { samples: point.sample_count } : {})
         }))
       };
 

@@ -134,19 +134,66 @@ export async function getUSDMPriceStats(startTime: number, endTime: number) {
   return result.rows[0];
 }
 
-export async function getHistoricalRatesForMarket(marketId: number, startTime: number, endTime: number) {
-  const result = await pool.query(`
-    SELECT 
-      md.timestamp,
-      fr.rate,
-      md.usdm_price
-    FROM market_data md
-    JOIN funding_rates fr ON fr.market_data_id = md.id
-    WHERE 
-      md.timestamp BETWEEN $1 AND $2
-      AND fr.market_id = $3
-    ORDER BY md.timestamp ASC
-  `, [startTime, endTime, marketId]);
+// Add this type and function before the existing functions
+type Granularity = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '8h' | '24h';
 
+function getIntervalQuery(granularity: Granularity): string {
+  const intervals = {
+    '1m': '1 minute',
+    '5m': '5 minutes',
+    '15m': '15 minutes',
+    '30m': '30 minutes',
+    '1h': '1 hour',
+    '4h': '4 hours',
+    '8h': '8 hours',
+    '24h': '24 hours'
+  };
+
+  return `
+    WITH grouped_data AS (
+      SELECT 
+        time_bucket('${intervals[granularity]}', to_timestamp(md.timestamp / 1000)) AS bucket,
+        AVG(fr.rate::numeric) as avg_rate,
+        AVG(md.usdm_price::numeric) as avg_usdm_price,
+        COUNT(*) as sample_count
+      FROM market_data md
+      JOIN funding_rates fr ON fr.market_data_id = md.id
+      WHERE 
+        md.timestamp BETWEEN $1 AND $2
+        AND fr.market_id = $3
+      GROUP BY bucket
+      ORDER BY bucket ASC
+    )
+    SELECT 
+      EXTRACT(EPOCH FROM bucket) * 1000 as timestamp,
+      avg_rate::text as rate,
+      avg_usdm_price::text as usdm_price,
+      sample_count
+    FROM grouped_data
+  `;
+}
+
+export async function getHistoricalRatesForMarket(
+  marketId: number, 
+  startTime: number, 
+  endTime: number,
+  granularity?: Granularity
+) {
+  const query = granularity 
+    ? getIntervalQuery(granularity)
+    : `
+      SELECT 
+        md.timestamp,
+        fr.rate,
+        md.usdm_price
+      FROM market_data md
+      JOIN funding_rates fr ON fr.market_data_id = md.id
+      WHERE 
+        md.timestamp BETWEEN $1 AND $2
+        AND fr.market_id = $3
+      ORDER BY md.timestamp ASC
+    `;
+
+  const result = await pool.query(query, [startTime, endTime, marketId]);
   return result.rows;
 } 
