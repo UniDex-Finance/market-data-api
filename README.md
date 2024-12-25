@@ -63,6 +63,29 @@ fetch(`https://unidexv4-market-data.up.railway.app/api/market/1/history?startTim
 - Stores historical data in PostgreSQL database
 - Provides REST API endpoints for data access
 - Updates data every minute
+- CORS enabled for frontend access
+  - Allows all origins (*)
+  - Supports GET requests
+  - 24-hour preflight caching
+
+## Frontend Usage
+
+The API supports CORS, allowing you to call it directly from frontend applications:
+
+```javascript
+// Example using fetch
+const response = await fetch('https://unidexv4-market-data.up.railway.app/api/latest');
+const data = await response.json();
+
+// Example using axios
+import axios from 'axios';
+const response = await axios.get('https://unidexv4-market-data.up.railway.app/api/latest');
+const data = response.data;
+
+// Example with specific market and duration
+const response = await fetch('https://unidexv4-market-data.up.railway.app/api/market/1/history/duration/24h?granularity=1h');
+const data = await response.json();
+```
 
 ## Setup for Local Development
 

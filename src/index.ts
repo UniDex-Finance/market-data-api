@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import cors from 'cors';
 import { fetchMarketData } from './services/dataFetcher';
 import { TRADING_PAIRS } from './constants';
 import { FundingRate, MarketDataResponse, EnhancedFundingRate } from './types';
@@ -16,6 +17,16 @@ import {
 const app = express();
 const port = process.env.PORT || 3001;
 
+// CORS configuration
+const corsOptions = {
+  origin: '*', // Allow all origins
+  methods: ['GET'], // Only allow GET requests
+  allowedHeaders: ['Content-Type'],
+  maxAge: 86400 // Cache preflight requests for 24 hours
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
 app.use(express.json());
 
 function parseDuration(duration: string): number {
